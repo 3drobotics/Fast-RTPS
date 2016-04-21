@@ -17,6 +17,7 @@
 #include <vector>
 #include "../common/Types.h"
 #include "../common/Guid.h"
+#include "../builtin/data/ParticipantProxyData.h"
 namespace eprosima{
 namespace fastrtps{
 namespace rtps{
@@ -43,7 +44,7 @@ typedef std::vector<octet> UserData;
 */
 class RTPSParticipantDiscoveryInfo{
 public:
-	RTPSParticipantDiscoveryInfo():m_status(DISCOVERED_RTPSPARTICIPANT){};
+	RTPSParticipantDiscoveryInfo():m_status(DISCOVERED_RTPSPARTICIPANT),m_participantProxyData(nullptr){};
 	virtual ~RTPSParticipantDiscoveryInfo(){};
 	//!Status
 	DISCOVERY_STATUS m_status;
@@ -55,6 +56,8 @@ public:
 	UserData m_userData;
 	//!Participant name
 	std::string m_RTPSParticipantName;
+	//!
+	ParticipantProxyData *m_participantProxyData;
 };
 }
 }

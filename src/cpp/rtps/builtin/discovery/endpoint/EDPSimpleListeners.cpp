@@ -18,6 +18,7 @@
 #include <fastrtps/rtps/builtin/discovery/endpoint/EDPSimple.h>
 #include <fastrtps/rtps/builtin/discovery/participant/PDPSimple.h>
 #include "../../../participant/RTPSParticipantImpl.h"
+#include <fastrtps/rtps/participant/RTPSParticipantListener.h>
 #include <fastrtps/rtps/reader/StatefulReader.h>
 
 #include <fastrtps/rtps/history/ReaderHistory.h>
@@ -78,6 +79,12 @@ void EDPSimplePUBListener::onNewCacheChangeAdded(RTPSReader* /*reader*/, const C
 				wdata->m_isAlive = true;
                 pdata->mp_mutex->unlock();
 				mp_SEDP->pairingWriterProxy(pdata, wdata);
+				if (mp_SEDP->mp_RTPSParticipant->getListener() != nullptr)
+				{
+					mp_SEDP->mp_RTPSParticipant->getListener()->onRTPSWriterDiscovery(
+						mp_SEDP->mp_RTPSParticipant->getUserRTPSParticipant(),
+						&writerProxyData, &tempMsg);
+				}
 			}
 			else if(pdata == nullptr) //RTPSParticipant NOT FOUND
 			{
@@ -89,6 +96,12 @@ void EDPSimplePUBListener::onNewCacheChangeAdded(RTPSReader* /*reader*/, const C
 				wdata->update(&writerProxyData);
                 pdata->mp_mutex->unlock();
 				mp_SEDP->pairingWriterProxy(pdata, wdata);
+				if (mp_SEDP->mp_RTPSParticipant->getListener() != nullptr)
+				{
+					mp_SEDP->mp_RTPSParticipant->getListener()->onRTPSWriterDiscovery(
+						mp_SEDP->mp_RTPSParticipant->getUserRTPSParticipant(),
+						&writerProxyData, &tempMsg);
+				}
 			}
 		}
 	}
@@ -98,6 +111,15 @@ void EDPSimplePUBListener::onNewCacheChangeAdded(RTPSReader* /*reader*/, const C
 		logInfo(RTPS_EDP,"Disposed Remote Writer, removing...",C_CYAN);
 		GUID_t auxGUID = iHandle2GUID(change->instanceHandle);
 		this->mp_SEDP->removeWriterProxy(auxGUID);
+		if (mp_SEDP->mp_RTPSParticipant->getListener() != nullptr)
+		{
+			WriterProxyData writerProxyData;
+			writerProxyData.m_guid = auxGUID;
+			writerProxyData.m_isAlive = false;
+			mp_SEDP->mp_RTPSParticipant->getListener()->onRTPSWriterDiscovery(
+				mp_SEDP->mp_RTPSParticipant->getUserRTPSParticipant(),
+				&writerProxyData, nullptr);
+		}
 	}
 
     //Removing change from history
@@ -203,6 +225,12 @@ void EDPSimpleSUBListener::onNewCacheChangeAdded(RTPSReader* /*reader*/, const C
 				rdata->m_isAlive = true;
                 pdata->mp_mutex->unlock();
 				mp_SEDP->pairingReaderProxy(pdata, rdata);
+				if (mp_SEDP->mp_RTPSParticipant->getListener() != nullptr)
+				{
+					mp_SEDP->mp_RTPSParticipant->getListener()->onRTPSReaderDiscovery(
+						mp_SEDP->mp_RTPSParticipant->getUserRTPSParticipant(),
+						&readerProxyData, &tempMsg);
+				}
 			}
 			else if(pdata == nullptr) //RTPSParticipant NOT FOUND
 			{
@@ -214,6 +242,12 @@ void EDPSimpleSUBListener::onNewCacheChangeAdded(RTPSReader* /*reader*/, const C
 				rdata->update(&readerProxyData);
                 pdata->mp_mutex->unlock();
 				mp_SEDP->pairingReaderProxy(pdata, rdata);
+				if (mp_SEDP->mp_RTPSParticipant->getListener() != nullptr)
+				{
+					mp_SEDP->mp_RTPSParticipant->getListener()->onRTPSReaderDiscovery(
+						mp_SEDP->mp_RTPSParticipant->getUserRTPSParticipant(),
+						&readerProxyData, &tempMsg);
+				}
 			}
 		}
 	}
@@ -223,6 +257,15 @@ void EDPSimpleSUBListener::onNewCacheChangeAdded(RTPSReader* /*reader*/, const C
 		logInfo(RTPS_EDP,"Disposed Remote Reader, removing...",C_CYAN);
 		GUID_t auxGUID = iHandle2GUID(change->instanceHandle);
 		this->mp_SEDP->removeReaderProxy(auxGUID);
+		if (mp_SEDP->mp_RTPSParticipant->getListener() != nullptr)
+		{
+			ReaderProxyData readerProxyData;
+			readerProxyData.m_guid = auxGUID;
+			readerProxyData.m_isAlive = false;
+			mp_SEDP->mp_RTPSParticipant->getListener()->onRTPSReaderDiscovery(
+				mp_SEDP->mp_RTPSParticipant->getUserRTPSParticipant(),
+				&readerProxyData, nullptr);
+		}
 	}
 
     // Remove change from history.

@@ -21,6 +21,9 @@ namespace fastrtps{
 namespace rtps{
 
 class RTPSParticipant;
+class ReaderProxyData;
+class WriterProxyData;
+struct CDRMessage_t;
 
 /**
 * Class RTPSParticipantListener with virtual method that the user can overload to respond to certain events.
@@ -38,6 +41,10 @@ public:
 	* @param info Discovery information of the participant
 	*/
 	virtual void onRTPSParticipantDiscovery(RTPSParticipant* /*part*/, RTPSParticipantDiscoveryInfo /*info*/){};
+
+	virtual void onRTPSReaderDiscovery(RTPSParticipant* /*part*/, ReaderProxyData*, CDRMessage_t*){}
+
+	virtual void onRTPSWriterDiscovery(RTPSParticipant* /*part*/, WriterProxyData*, CDRMessage_t*){}
 };
 }
 }
