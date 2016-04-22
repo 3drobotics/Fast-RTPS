@@ -3,6 +3,11 @@
 ###############################################################################
 cmake_minimum_required(VERSION 2.8.12)
 
+# default MACOSX_RPATH to ON
+if(POLICY CMP0042)
+    cmake_policy(SET CMP0042 NEW)
+endif()
+
 # Set CMAKE_BUILD_TYPE to Release by default.
 if(DEFINED CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE} CACHE STRING
