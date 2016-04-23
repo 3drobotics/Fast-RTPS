@@ -189,11 +189,13 @@ bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
 //	cout << cdrmsg_header->max_size << " ";
 //	cout << cdrmsg_fullmsg->max_size << " "<<endl;
 	std::vector<const CacheChange_t*>::iterator cit = changes->begin();
+	Time_t msg_timestamp;
 
 	uint16_t data_msg_size = 0;
 	uint16_t change_n = 1;
 	//FIRST SUBMESSAGE
 	RTPSMessageGroup::prepareDataSubM(W,cdrmsg_submessage, expectsInlineQos, *cit, ReaderId);
+	msg_timestamp = (*cit)->sourceTimestamp;
 	data_msg_size = (uint16_t)cdrmsg_submessage->length;
 	if(data_msg_size+(uint32_t)RTPSMESSAGE_HEADER_SIZE > msg_group->m_rtpsmsg_fullmsg.max_size)
 	{
@@ -212,8 +214,12 @@ bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
         {
             RTPSMessageCreator::addSubmessageInfoDST(cdrmsg_fullmsg, remoteGuidPrefix);
         }
+		// Send INFO_TS, either with cache change's timestamp, or with invalidate set (and no timestamp)
+		if (msg_timestamp != c_TimeInvalid)
+			RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,false);
+		else
+			RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,true);
 
-		RTPSMessageCreator::addSubmessageInfoTS_Now(cdrmsg_fullmsg,false); //Change here to add a INFO_TS for DATA.
 		if(first)
 		{
 			CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_submessage);
@@ -222,12 +228,19 @@ bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
 		}
 	//	cout << "msg lengtH:" <<cdrmsg_fullmsg->length<< "data size: "<<data_msg_size<< " max size: "<<cdrmsg_fullmsg->max_size<<endl;
     //	TODO Maybe an error because use the previous length.
+    //  XXX Yes, this data_msg_size is for the previous message
+    //  XXX Need to also check that the INFO_TS will fit
 		while(cdrmsg_fullmsg->length + data_msg_size < cdrmsg_fullmsg->max_size
 				&& (change_n + 1) <= (uint16_t)changes->size()) //another one fits in the full message
 		{
 			++change_n;
 			++cit;
 			RTPSMessageGroup::prepareDataSubM(W,cdrmsg_submessage, expectsInlineQos,*cit,ReaderId);
+			msg_timestamp = (*cit)->sourceTimestamp;
+			if (msg_timestamp != c_TimeInvalid)
+				RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,false);
+			else
+				RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,true);
 			CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_submessage);
 			added = true;
 		}

@@ -13,6 +13,7 @@
 
 #include <fastrtps/rtps/history/WriterHistory.h>
 
+#include <fastrtps/utils/eClock.h>
 #include <fastrtps/utils/RTPSLog.h>
 #include <fastrtps/rtps/writer/RTPSWriter.h>
 
@@ -28,6 +29,9 @@ typedef std::pair<InstanceHandle_t,std::vector<CacheChange_t*>> t_pairKeyChanges
 typedef std::vector<t_pairKeyChanges> t_vectorPairKeyChanges;
 
 static const char* const CLASS_NAME = "WriterHistory";
+
+// seems like setTimeNow should really be a static method so we wouldn't need this
+static eClock hClock;
 
 WriterHistory::WriterHistory(const HistoryAttributes& att):
 				History(att),
@@ -64,6 +68,7 @@ bool WriterHistory::add_change(CacheChange_t* a_change)
 	}
 	++m_lastCacheChangeSeqNum;
 	a_change->sequenceNumber = m_lastCacheChangeSeqNum;
+	hClock.setTimeNow(&a_change->sourceTimestamp, eClock::MONOTONIC);
 	m_changes.push_back(a_change);
 	logInfo(RTPS_HISTORY,"Change "<< a_change->sequenceNumber << " added with "<<a_change->serializedPayload.length<< " bytes");
 	updateMaxMinSeqNum();

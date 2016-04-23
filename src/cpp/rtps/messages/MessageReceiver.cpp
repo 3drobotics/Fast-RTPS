@@ -105,8 +105,7 @@ void MessageReceiver::reset(){
 	for (uint8_t i = 0; i<16; ++i)
 		mp_change->instanceHandle.value[i] = 0;
 	mp_change->isRead = 0;
-	mp_change->sourceTimestamp.seconds = 0;
-	mp_change->sourceTimestamp.fraction = 0;
+	mp_change->sourceTimestamp = c_TimeInvalid;
 	//cout << "MESSAGE RECEIVER RESEST WITH MAX SIZE: " << mp_change->serializedPayload.max_size << endl;
 }
 
