@@ -58,12 +58,14 @@ public:
 	//!Difference from UTC in seconds
 	int32_t m_utc_seconds_diff;
 	
+	typedef enum { REALTIME, MONOTONIC } ClockId_t;
+
 	/**
-	* Fill a Time_t with the current time
+	* Fill a Time_t with the current time from a specified clock
 	* @param now Pointer to a Time_t instance to fill with the current time
 	* @return true on success
 	*/
-	bool setTimeNow(Time_t* now);
+	bool setTimeNow(Time_t* now, ClockId_t clockId = REALTIME);
 	
 	/**
 	* Method to start measuring an interval in us.
