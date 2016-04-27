@@ -267,65 +267,10 @@ bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
         const GuidPrefix_t& remoteGuidPrefix, const EntityId_t& ReaderId,
         const Locator_t& loc, bool expectsInlineQos)
 {
-	const char* const METHOD_NAME = "send_Changes_AsData";
-	logInfo(RTPS_WRITER,"Sending relevant changes as data messages");
-	CDRMessage_t* cdrmsg_submessage = &msg_group->m_rtpsmsg_submessage;
-	CDRMessage_t* cdrmsg_header = &msg_group->m_rtpsmsg_header;
-	CDRMessage_t* cdrmsg_fullmsg = &msg_group->m_rtpsmsg_fullmsg;
-//	cout << "Msg group with sizes: "<<cdrmsg_submessage->max_size << " ";
-//	cout << cdrmsg_header->max_size << " ";
-//	cout << cdrmsg_fullmsg->max_size << " "<<endl;
-	uint16_t data_msg_size = 0;
-	uint16_t change_n = 1;
-	//FIRST SUBMESSAGE
-	std::vector<const CacheChange_t*>::iterator cit = changes->begin();
-	RTPSMessageGroup::prepareDataSubM(W,cdrmsg_submessage, expectsInlineQos, *cit, ReaderId);
-	data_msg_size = (uint16_t)cdrmsg_submessage->length;
-	if(data_msg_size+(uint32_t)RTPSMESSAGE_HEADER_SIZE > msg_group->m_rtpsmsg_fullmsg.max_size)
-	{
-		logError(RTPS_WRITER,"The Data messages are larger than max size, something is wrong");
-		return false;
-	}
-	bool first = true;
-	do
-	{
-		bool added = false;
-		CDRMessage::initCDRMsg(cdrmsg_fullmsg);
-		CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_header);
-
-        // If there is a destinatary, send the submessage INFO_DST.
-        if(remoteGuidPrefix != c_GuidPrefix_Unknown)
-        {
-            RTPSMessageCreator::addSubmessageInfoDST(cdrmsg_fullmsg, remoteGuidPrefix);
-        }
-
-		RTPSMessageCreator::addSubmessageInfoTS_Now(cdrmsg_fullmsg,false);
-		if(first)
-		{
-			CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_submessage);
-			first = false;
-			added = true;
-		}
-		//cout << "msg lengtH:" <<cdrmsg_fullmsg->length<< "data size: "<<data_msg_size<< " max size: "<<cdrmsg_fullmsg->max_size<<endl;
-		while(cdrmsg_fullmsg->length + data_msg_size < cdrmsg_fullmsg->max_size
-				&& (change_n + 1) <= (uint16_t)changes->size()) //another one fits in the full message
-		{
-			++change_n;
-			++cit;
-			RTPSMessageGroup::prepareDataSubM(W,cdrmsg_submessage, expectsInlineQos,*cit,ReaderId);
-			CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_submessage);
-			added = true;
-		}
-		if(added)
-		{
-			W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg,loc);
-		}
-		else
-		{
-			logError(RTPS_WRITER,"A problem occurred when adding a message");
-		}
-	}while(change_n < changes->size()); //There is still a message to add
-	return true;
+    LocatorList_t locs1;
+    LocatorList_t locs2;
+    locs1.push_back(loc);
+    return send_Changes_AsData(msg_group, W, changes, remoteGuidPrefix, ReaderId, locs1, locs2, expectsInlineQos);
 }
 
 
