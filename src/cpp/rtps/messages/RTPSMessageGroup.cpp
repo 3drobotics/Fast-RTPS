@@ -174,96 +174,163 @@ void RTPSMessageGroup::prepareDataSubM(RTPSWriter* W, CDRMessage_t* submsg, bool
 }
 
 
-bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
-		RTPSWriter* W, std::vector<const CacheChange_t*>* changes,
-        const GuidPrefix_t& remoteGuidPrefix, const EntityId_t& ReaderId,
-		LocatorList_t& unicast, LocatorList_t& multicast,
-		bool expectsInlineQos)
+// helper: create empty RTPS message (RTPS header + optional INFO_DST)
+static void msg_group_init(RTPSMessageGroup_t *msg_group, const GuidPrefix_t& remoteGuidPrefix)
 {
-	const char* const METHOD_NAME = "send_Changes_AsData";
-	logInfo(RTPS_WRITER,"Sending relevant changes as data messages");
-	CDRMessage_t* cdrmsg_submessage = &msg_group->m_rtpsmsg_submessage;
-	CDRMessage_t* cdrmsg_header = &msg_group->m_rtpsmsg_header;
-	CDRMessage_t* cdrmsg_fullmsg = &msg_group->m_rtpsmsg_fullmsg;
-//	cout << "Msg group with sizes: "<<cdrmsg_submessage->max_size << " ";
-//	cout << cdrmsg_header->max_size << " ";
-//	cout << cdrmsg_fullmsg->max_size << " "<<endl;
-	std::vector<const CacheChange_t*>::iterator cit = changes->begin();
-	Time_t msg_timestamp;
-
-	uint16_t data_msg_size = 0;
-	uint16_t change_n = 1;
-	//FIRST SUBMESSAGE
-	RTPSMessageGroup::prepareDataSubM(W,cdrmsg_submessage, expectsInlineQos, *cit, ReaderId);
-	msg_timestamp = (*cit)->sourceTimestamp;
-	data_msg_size = (uint16_t)cdrmsg_submessage->length;
-	if(data_msg_size+(uint32_t)RTPSMESSAGE_HEADER_SIZE > msg_group->m_rtpsmsg_fullmsg.max_size)
-	{
-		logError(RTPS_WRITER,"The Data messages are larger than max size, something is wrong");
-		return false;
-	}
-	bool first = true;
-	do
-	{
-		bool added = false;
-		CDRMessage::initCDRMsg(cdrmsg_fullmsg);
-		CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_header);
-
-        // If there is a destinatary, send the submessage INFO_DST.
-        if(remoteGuidPrefix != c_GuidPrefix_Unknown)
-        {
-            RTPSMessageCreator::addSubmessageInfoDST(cdrmsg_fullmsg, remoteGuidPrefix);
-        }
-		// Send INFO_TS, either with cache change's timestamp, or with invalidate set (and no timestamp)
-		if (msg_timestamp != c_TimeInvalid)
-			RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,false);
-		else
-			RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,true);
-
-		if(first)
-		{
-			CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_submessage);
-			first = false;
-			added = true;
-		}
-	//	cout << "msg lengtH:" <<cdrmsg_fullmsg->length<< "data size: "<<data_msg_size<< " max size: "<<cdrmsg_fullmsg->max_size<<endl;
-    //	TODO Maybe an error because use the previous length.
-    //  XXX Yes, this data_msg_size is for the previous message
-    //  XXX Need to also check that the INFO_TS will fit
-		while(cdrmsg_fullmsg->length + data_msg_size < cdrmsg_fullmsg->max_size
-				&& (change_n + 1) <= (uint16_t)changes->size()) //another one fits in the full message
-		{
-			++change_n;
-			++cit;
-			RTPSMessageGroup::prepareDataSubM(W,cdrmsg_submessage, expectsInlineQos,*cit,ReaderId);
-			msg_timestamp = (*cit)->sourceTimestamp;
-			if (msg_timestamp != c_TimeInvalid)
-				RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,false);
-			else
-				RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg,msg_timestamp,true);
-			CDRMessage::appendMsg(cdrmsg_fullmsg,cdrmsg_submessage);
-			added = true;
-		}
-		if(added)
-		{
-			for(std::vector<Locator_t>::iterator lit = unicast.begin();lit!=unicast.end();++lit)
-				W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg,(*lit));
-
-			for(std::vector<Locator_t>::iterator lit = multicast.begin();lit!=multicast.end();++lit)
-				W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg,(*lit));
-		}
-		else
-		{
-			logError(RTPS_WRITER,"A problem occurred when adding a message");
-		}
-
-
-	}while(change_n < changes->size()); //There is still a message to add
-	return true;
+    // fullmsg = empty
+    CDRMessage::initCDRMsg(&msg_group->m_rtpsmsg_fullmsg);
+    // fullmsg += RTPS header
+    CDRMessage::appendMsg(&msg_group->m_rtpsmsg_fullmsg, &msg_group->m_rtpsmsg_header);
+    // fullmsg += INFO_DST if needed
+    if (remoteGuidPrefix != c_GuidPrefix_Unknown)
+        RTPSMessageCreator::addSubmessageInfoDST(&msg_group->m_rtpsmsg_fullmsg, remoteGuidPrefix);
 }
 
+// create an RTPS message consisting of several data (and other) submessages
+//
+// basic flow is:
+//
+// clear rtps message
+// for each cache change
+//     create a data submessage from cache change
+//     determine whether an info_ts submessage is required (and how big it is)
+//     if rtps message is not empty and (data submessage + info_ts) don't fit
+//         send rtps message
+//         clear rtps message
+//     if data submessage and info_ts fit in rtps message
+//         append them
+//     else
+//         data submessage does not fit in an empty rtps message; skip it
+// end for
+// if rtps message is not empty
+//     send rtps message
+//
 bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
-		RTPSWriter* W, std::vector<const CacheChange_t*>* changes,
+        RTPSWriter* W, std::vector<const CacheChange_t*>* changes,
+        const GuidPrefix_t& remoteGuidPrefix, const EntityId_t& ReaderId,
+        LocatorList_t& unicast, LocatorList_t& multicast,
+        bool expectsInlineQos)
+{
+    const char* const METHOD_NAME = "send_Changes_AsData";
+    logInfo(RTPS_WRITER,"Sending relevant changes as data messages");
+    CDRMessage_t* cdrmsg_submessage = &msg_group->m_rtpsmsg_submessage;
+    CDRMessage_t* cdrmsg_fullmsg = &msg_group->m_rtpsmsg_fullmsg;
+
+    // true when fullmsg has only the rtps header and (possibly) the INFO_DST submessage;
+    // false when any other submessages have been added
+    bool fullmsg_empty;
+
+    // true when an INFO_TS with timestamp has been inserted;
+    // false before any INFO_TS are inserted, or when one is inserted with the invalid flag set
+    bool fullmsg_info_ts;
+
+    msg_group_init(msg_group, remoteGuidPrefix);
+    fullmsg_empty = true;
+    fullmsg_info_ts = false;
+
+    // how many bytes the INFO_TS for the current submessage (if any) will take
+    unsigned info_ts_size;
+
+    // std::vector<const CacheChange_t*>::iterator cit;
+    for (auto cit = changes->begin(); cit != changes->end(); cit++)
+    {
+
+        // create submessage containing next cache change
+        RTPSMessageGroup::prepareDataSubM(W, cdrmsg_submessage, expectsInlineQos, *cit, ReaderId);
+        unsigned data_msg_size = cdrmsg_submessage->length;
+        Time_t msg_timestamp = (*cit)->sourceTimestamp;
+        bool msg_has_timestamp = (msg_timestamp != c_TimeInvalid);
+
+        // Do we need INFO_TS, and if so, how many bytes will it take? We need it if this
+        // message has a valid timestamp (assume it is different from any previous message),
+        // or if this message does not have a valid timestamp and there is a timestamp set
+        // in the message.
+        if (msg_has_timestamp)
+        {
+            // need INFO_TS with submessage's timestamp
+            info_ts_size = 12; // XXX
+        }
+        else
+        {
+            // submessage does not have a valid timestamp
+            if (fullmsg_info_ts)
+            {
+                // message has a previous INFO_TS; need new INFO_TS with invalid flag set
+                info_ts_size = 4; // XXX
+            }
+            else // !fullmsg_info_ts
+            {
+                // message does not have a previous INFO_TS, so none is needed
+                info_ts_size = 0;
+            }
+        }
+
+        unsigned fullmsg_room = cdrmsg_fullmsg->max_size - cdrmsg_fullmsg->length;
+        bool submsg_fits = ((data_msg_size + info_ts_size) <= fullmsg_room);
+
+        // Send fullmsg first if necessary to make room. If fullmsg is empty and
+        // submessage does not fit, error is detected below.
+        if (!fullmsg_empty && !submsg_fits)
+        {
+            // send it!
+            // std::vector<Locator_t>::iterator lit
+            for (auto lit = unicast.begin(); lit != unicast.end(); ++lit)
+                W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg, *lit);
+            for (auto lit = multicast.begin(); lit != multicast.end(); ++lit)
+                W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg, *lit);
+            // clear fullmsg
+            msg_group_init(msg_group, remoteGuidPrefix);
+            fullmsg_empty = true;
+            fullmsg_info_ts = false;
+            fullmsg_room = cdrmsg_fullmsg->max_size - cdrmsg_fullmsg->length;
+            submsg_fits = ((data_msg_size + info_ts_size) <= fullmsg_room);
+        }
+
+        if (submsg_fits)
+        {
+            // append info_ts
+            if (info_ts_size > 0)
+            {
+                RTPSMessageCreator::addSubmessageInfoTS(cdrmsg_fullmsg, msg_timestamp, false);
+                // We either inserted an INFO_TS with a timestamp, or a flag
+                // invalidating the timestamp. In either case we need to
+                // remember that for the next submessage (if any) so we can
+                // know whether to insert or invalidate the timestamp for that
+                // submessage.
+                if (info_ts_size > 8)
+                    fullmsg_info_ts = true;
+                else
+                    fullmsg_info_ts = false;
+            }
+            // append cache change
+            CDRMessage::appendMsg(cdrmsg_fullmsg, cdrmsg_submessage);
+            fullmsg_empty = false;
+        }
+        else
+        {
+            // skipping data; does not fit in an empty rtps message
+            logError(RTPS_WRITER, "Cache change too big; not sending")
+        }
+
+    } // for (auto cit = changes->begin(); cit != changes->end(); cit++)
+
+    // finished processing cache changes
+
+    if (!fullmsg_empty)
+    {
+        // send it!
+        for (auto lit = unicast.begin(); lit != unicast.end(); ++lit)
+            W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg, *lit);
+        for (auto lit = multicast.begin(); lit != multicast.end(); ++lit)
+            W->getRTPSParticipant()->sendSync(cdrmsg_fullmsg, *lit);
+    }
+
+    return true;
+
+} // bool RTPSMessageGroup::send_Changes_AsData()
+
+bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
+        RTPSWriter* W, std::vector<const CacheChange_t*>* changes,
         const GuidPrefix_t& remoteGuidPrefix, const EntityId_t& ReaderId,
         const Locator_t& loc, bool expectsInlineQos)
 {
@@ -272,18 +339,6 @@ bool RTPSMessageGroup::send_Changes_AsData(RTPSMessageGroup_t* msg_group,
     locs1.push_back(loc);
     return send_Changes_AsData(msg_group, W, changes, remoteGuidPrefix, ReaderId, locs1, locs2, expectsInlineQos);
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 }
 } /* namespace rtps */
