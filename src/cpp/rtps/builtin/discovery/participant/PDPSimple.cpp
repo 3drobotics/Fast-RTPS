@@ -27,6 +27,8 @@
 
 #include <fastrtps/rtps/builtin/discovery/participant/timedevent/ResendParticipantProxyDataPeriod.h>
 
+#include <fastrtps/rtps/participant/RTPSParticipantDiscoveryInfo.h>
+#include <fastrtps/rtps/participant/RTPSParticipantListener.h>
 
 #include "../../../participant/RTPSParticipantImpl.h"
 
@@ -523,6 +525,8 @@ bool PDPSimple::removeRemoteParticipant(GUID_t& partGUID)
 	boost::unique_lock<boost::recursive_mutex> guardW(*this->mp_SPDPWriter->getMutex());
 	boost::unique_lock<boost::recursive_mutex> guardR(*this->mp_SPDPReader->getMutex());
 	ParticipantProxyData* pdata = nullptr;
+	// partGUID gets wiped by the delete of pdata below
+	GUID_t guid = partGUID;
 	//Remove it from our vector or RTPSParticipantProxies:
 	boost::unique_lock<boost::recursive_mutex> guardPDP(*this->mp_mutex);
 	for(std::vector<ParticipantProxyData*>::iterator pit = m_participantProxies.begin();
@@ -573,6 +577,16 @@ bool PDPSimple::removeRemoteParticipant(GUID_t& partGUID)
         guardR.unlock();
 
 		delete(pdata);
+
+		RTPSParticipantImpl *partImpl = this->getRTPSParticipant();
+		if (partImpl->getListener() != nullptr)
+		{
+			RTPSParticipantDiscoveryInfo info;
+			info.m_status = REMOVED_RTPSPARTICIPANT;
+			info.m_guid = guid;
+			partImpl->getListener()->onRTPSParticipantDiscovery(partImpl->getUserRTPSParticipant(), info);
+		}
+
 		return true;
 	}
 

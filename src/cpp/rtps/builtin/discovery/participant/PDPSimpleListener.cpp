@@ -131,13 +131,6 @@ void PDPSimpleListener::onNewCacheChangeAdded(RTPSReader* reader, const CacheCha
         GUID_t guid;
         iHandle2GUID(guid,change->instanceHandle);
         this->mp_SPDP->removeRemoteParticipant(guid);
-        RTPSParticipantDiscoveryInfo info;
-        info.m_status = REMOVED_RTPSPARTICIPANT;
-        info.m_guid = guid;
-        if(this->mp_SPDP->getRTPSParticipant()->getListener()!=nullptr)
-            this->mp_SPDP->getRTPSParticipant()->getListener()->onRTPSParticipantDiscovery(
-                    this->mp_SPDP->getRTPSParticipant()->getUserRTPSParticipant(),
-                    info);
     }
     
     //Remove change form history.
