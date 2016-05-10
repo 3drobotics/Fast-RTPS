@@ -50,11 +50,14 @@ bool ResourceSendImpl::initSend(RTPSParticipantImpl* /*pimpl*/, const Locator_t&
 	boost::asio::socket_base::send_buffer_size option;
 	bool not_bind = true;
 	bool initialized = false;
+	bool ip4_ready = false;
 	int bind_tries = 0;
 	for (auto ipit = locNames.begin(); ipit != locNames.end(); ++ipit)
 	{
 		if (ipit->type == IPFinder::IP4 && m_useIP4)
 		{
+			if (ip4_ready)
+				continue;
 			mv_sendLocator_v4.push_back(loc);
 			auto sendLocv4 = mv_sendLocator_v4.back();
 			sendLocv4.port = loc.port;
@@ -67,7 +70,7 @@ bool ResourceSendImpl::initSend(RTPSParticipantImpl* /*pimpl*/, const Locator_t&
 			udp::endpoint send_endpoint;
 			while (not_bind && bind_tries < MAX_BIND_TRIES)
 			{
-				send_endpoint = udp::endpoint(boost::asio::ip::address_v4::from_string(ipit->name), (uint16_t)sendLocv4.port);
+				send_endpoint = udp::endpoint(boost::asio::ip::address_v4::from_string("0.0.0.0"), (uint16_t)sendLocv4.port);
 				try{
 					sendSocketv4->bind(send_endpoint);
 					not_bind = false;
@@ -86,6 +89,7 @@ bool ResourceSendImpl::initSend(RTPSParticipantImpl* /*pimpl*/, const Locator_t&
 				logInfo(RTPS_MSG_OUT, "UDPv4: " << sendSocketv4->local_endpoint() << "|| State: " << sendSocketv4->is_open() <<
 						" || buffer size: " << option.value(), C_YELLOW);
 				initialized = true;
+				ip4_ready = true;
 			}
 			else
 			{
