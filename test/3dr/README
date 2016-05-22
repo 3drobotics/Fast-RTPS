@@ -1,0 +1,10 @@
+Installing googletest on osx:
+$ git clone https://github.com/google/googletest
+$ cd googletest
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make install
+
+It should install stuff to /usr/local, and
+the Fast-RTPS build should find it there.

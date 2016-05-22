@@ -1,3 +1,4 @@
+add_subdirectory(3dr)
 add_subdirectory(blackbox)
 add_subdirectory(performance)
 add_subdirectory(unittest/rtps/common)
