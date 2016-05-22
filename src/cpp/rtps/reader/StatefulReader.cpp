@@ -193,7 +193,12 @@ bool StatefulReader::processDataMsg(CacheChange_t *change)
         }
         else
         {
-            logError(RTPS_MSG_IN,IDSTRING"Problem reserving CacheChange in reader: " << getGuid().entityId, C_BLUE);
+            // This happens if a slow reader is not keeping up with a fast
+            // writer. Dropping the message here is simplest, since it is
+            // then like the message never arrived; the reader will never
+            // ack it and it should be re-sent. Attempting to keep this one
+            // and drop the oldest would mean the subscriber might have
+            // acked a message that was not really delivered.
             return false;
         }
 

@@ -485,6 +485,7 @@ bool StatefulWriter::clean_history(unsigned int max)
     std::vector<CacheChange_t*> ackca;
     bool limit = (max != 0);
 
+    // create list (ackca) of (up to 'max') changes that are already acked by all matched readers
     for(std::vector<CacheChange_t*>::iterator cit = mp_history->changesBegin();
             cit != mp_history->changesEnd() && (!limit || ackca.size() < max); ++cit)
     {
@@ -511,13 +512,49 @@ bool StatefulWriter::clean_history(unsigned int max)
             ackca.push_back(*cit);
     }
 
+    // delete already-acked changes
     for(std::vector<CacheChange_t*>::iterator cit = ackca.begin();
             cit != ackca.end(); ++cit)
     {
         mp_history->remove_change_g(*cit);
+        if (max > 0)
+            max--;
     }
 
-    return (ackca.size() > 0);
+    // If we have not deleted enough changes, delete the oldest ones until we
+    // get to the required count. These entries will not have been acked by
+    // all matched readers. The choice is to block the writer or drop samples;
+    // we choose to drop samples because of the multiple-readers case, i.e. if
+    // one reader goes down (or is slow), it should not prevent getting data
+    // to another reader that is alive and keeping up. A bad effect of this
+    // choice is that if the publish rate exceeds link capacity, the writer
+    // will not get any pushback that it is writing too fast. I don't think
+    // there's a single solution that fits all use cases (without adding more
+    // qos settings).
+    while (max > 0)
+    {
+        CacheChange_t *cc;
+        if (!mp_history->get_min_change(&cc))
+        {
+            logError(RTPS_WRITER, "Error getting min change for writer " << getGuid());
+            break;
+        }
+
+        // XXX Remove from all reader's unsent changes? Testing without doing
+        // anything here seems to show it is working, but it seems like there
+        // should be dangling references.
+
+        // delete it
+        if (!mp_history->remove_change(cc))
+        {
+            logError(RTPS_WRITER, "Error removing change from history for writer " << getGuid());
+            break;
+        }
+        
+        max--;
+    }
+
+    return (max == 0);
 }
 
 /*

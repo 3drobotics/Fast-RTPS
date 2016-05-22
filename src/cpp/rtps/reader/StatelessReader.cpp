@@ -181,7 +181,10 @@ bool StatelessReader::processDataMsg(CacheChange_t *change)
         }
         else
         {
-            logError(RTPS_MSG_IN,IDSTRING"Problem reserving CacheChange in reader: " << getGuid().entityId, C_BLUE);
+            // This can happen if the reader is too slow for the writer. In
+            // contrast to the stateful (reliable) case, it might be better
+            // to delete the oldest sample from histor and keep this one.
+            // For now, the simpler method of dropping this sample is done.
             return false;
         }
 
